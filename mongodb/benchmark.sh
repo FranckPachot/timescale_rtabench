@@ -23,13 +23,25 @@ sudo apt-get install -y mongodb-org
 sudo systemctl restart mongod
 sleep 5
 
+# drop the collections to re-import if they exist
+mongosh --eval '
+db.customers.drop();
+db.products.drop();
+db.orders.drop();
+db.order_items.drop();
+db.order_events.drop();
+'
+
 mongosh --eval 'db.createCollection("order_events", { timeseries: { timeField: "event_created", metaField: "event_type", bucketRoundingSeconds: 86400, bucketMaxSpanSeconds: 86400 }});'
 
-mongoimport --uri "mongodb://localhost:27017" --db test --collection customers --type csv --fields customer_id,name,birthday,email,address,city,zip,state,country 'dataset/customers.csv' #import
-mongoimport --uri "mongodb://localhost:27017" --db test --collection products --type csv --fields product_id,name,description,category,price,stock 'dataset/products.csv' #import
-mongoimport --uri "mongodb://localhost:27017" --db test --collection orders --type csv --fields order_id,customer_id,created_at 'dataset/orders.csv' #import
-mongoimport --uri "mongodb://localhost:27017" --db test --collection order_items --type csv --fields order_id,product_id,amount 'dataset/order_items.csv' #import
-mongoimport --uri "mongodb://localhost:27017" --db test --collection order_events --type csv --fields order_id.int32\(\),counter.int32\(\),event_created.date\("2006-01-02 15:04:05"\),event_type.string\(\),satisfaction.double\(\),processor.string\(\),backup_processor.string\(\),event_payload.string\(\) --columnsHaveTypes 'dataset/order_events.csv' #import
+# better use all CPU for the import
+workers=$( lscpu | awk '/^CPU\(s\)/{print $NF}' )
+
+mongoimport --uri "mongodb://localhost:27017" --numInsertionWorkers ${workers:-8} --db test --collection customers    --type csv --fields customer_id,name,birthday,email,address,city,zip,state,country 'dataset/customers.csv' #import
+mongoimport --uri "mongodb://localhost:27017" --numInsertionWorkers ${workers:-8} --db test --collection products     --type csv --fields product_id,name,description,category,price,stock 'dataset/products.csv' #import
+mongoimport --uri "mongodb://localhost:27017" --numInsertionWorkers ${workers:-8} --db test --collection orders       --type csv --fields order_id,customer_id,created_at 'dataset/orders.csv' #import
+mongoimport --uri "mongodb://localhost:27017" --numInsertionWorkers ${workers:-8} --db test --collection order_items  --type csv --fields order_id,product_id,amount 'dataset/order_items.csv' #import
+mongoimport --uri "mongodb://localhost:27017" --numInsertionWorkers ${workers:-8} --db test --collection order_events --type csv --fields order_id.int32\(\),counter.int32\(\),event_created.date\("2006-01-02 15:04:05"\),event_type.string\(\),satisfaction.double\(\),processor.string\(\),backup_processor.string\(\),event_payload.string\(\) --columnsHaveTypes 'dataset/order_events.csv' #import
 
 mongosh --eval "db.customers.createIndex({ customer_id: 1 }, { unique: true })" #import
 mongosh --eval "db.products.createIndex({ product_id: 1 }, { unique: true })" #import
