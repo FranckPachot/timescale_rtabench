@@ -51,6 +51,28 @@ mongosh --eval "db.order_events.createIndex({ order_id: 1 })" #import
 mongosh --eval "db.order_events.createIndex({ event_created: 1 })" #import
 mongosh --eval "db.order_events.createIndex({ order_id: 1, event_type: 1 })" #import
 
+# Fix data model
+mongosh --eval '
+db.orders.renameCollection("order_headers");
+db.order_headers.aggregate([
+  {
+    $lookup: {
+      from: "order_items",
+      localField: "order_id",
+      foreignField: "order_id",
+      as: "items"  // Embed order items in this field
+    }
+  },
+  {
+    $out: "orders" // replace orders collection
+  }
+]);
+db.orders.createIndex({ order_id: 1 }, { unique: true });
+db.order_headers.drop();
+// keep old items until all queries are fixed
+//db.order_items.drop();
+'
+
 mongosh --eval "db.stats().totalSize;" #datasize
 	
 ./run.sh 2>&1 | tee log.txt
